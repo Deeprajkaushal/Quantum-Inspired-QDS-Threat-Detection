@@ -11,6 +11,10 @@ class InMemReplayLedger:
     def __init__(self):
         self._consumed_ids = set()
 
+    @property
+    def seen_signatures(self):
+        return self._consumed_ids
+
     def is_consumed(self, signature_id: str) -> bool:
         return signature_id in self._consumed_ids
 

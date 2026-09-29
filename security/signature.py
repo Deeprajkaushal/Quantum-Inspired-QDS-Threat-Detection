@@ -42,6 +42,7 @@ def generate_qds_signature(
         'timestamp': timestamp,
         'nonce': nonce,
         'basis_sequence': basis_sequence,
+        'bases': basis_sequence,
         'quantum_states': quantum_states,
         'classical_metadata_label': 'Classical metadata / integrity layer',
         'quantum_signature_label': 'Simulated quantum-signature verification layer'

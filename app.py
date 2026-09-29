@@ -217,12 +217,12 @@ with tab2:
     """)
     sig = report['signature']
     st.json({
-        "signature_id": sig['signature_id'],
-        "message_digest_sha256": sig['message_digest'],
-        "nonce": sig['nonce'],
-        "timestamp": sig['timestamp'],
-        "quantum_state_tokens": sig['quantum_states'],
-        "bases_used": sig['bases']
+        "signature_id": sig.get('signature_id', ''),
+        "message_digest_sha256": sig.get('message_digest', ''),
+        "nonce": sig.get('nonce', ''),
+        "timestamp": sig.get('timestamp', ''),
+        "quantum_state_tokens": sig.get('quantum_states', []),
+        "bases_used": sig.get('basis_sequence', sig.get('bases', []))
     })
 
 with tab3:
