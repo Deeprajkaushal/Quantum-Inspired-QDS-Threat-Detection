@@ -32,7 +32,7 @@ apply_custom_css()
 render_header()
 render_disclaimer()
 
-# Initialize session states for demo scenarios
+# Initialize session states for demo scenarios and pipeline execution
 if 'scenario' not in st.session_state:
     st.session_state['scenario'] = 'A. Legitimate Signature'
 if 'sender' not in st.session_state:
@@ -47,11 +47,15 @@ if 'noise' not in st.session_state:
     st.session_state['noise'] = 0.05
 if 'threshold' not in st.session_state:
     st.session_state['threshold'] = 0.05
+if 'report' not in st.session_state:
+    st.session_state['report'] = None
+if 'last_config' not in st.session_state:
+    st.session_state['last_config'] = None
 
 # Sidebar Controls
 st.sidebar.markdown("## ⚙️ Simulation Parameters")
 
-# 1-Click Demo Buttons
+# 1-Click Demo Buttons (Configure parameters only; do not auto-run pipeline)
 st.sidebar.markdown("### 🎯 Demo Presets (1-Click)")
 col_demo1, col_demo2 = st.sidebar.columns(2)
 
@@ -61,29 +65,47 @@ if col_demo1.button("🟢 Legitimate"):
     st.session_state['verifier'] = 'VERIFIER_A'
     st.session_state['noise'] = 0.02
     st.session_state['threshold'] = 0.05
+    st.session_state['report'] = None
 
 if col_demo2.button("🔴 Forged"):
     st.session_state['scenario'] = 'B. Forged Signature'
     st.session_state['sender'] = 'ALICE'
     st.session_state['verifier'] = 'VERIFIER_A'
+    st.session_state['noise'] = 0.02
+    st.session_state['threshold'] = 0.05
+    st.session_state['report'] = None
 
 if col_demo1.button("👤 Impersonate"):
     st.session_state['scenario'] = 'C. Impersonation Attack'
     st.session_state['sender'] = 'EVE_MALICIOUS'
     st.session_state['verifier'] = 'VERIFIER_A'
+    st.session_state['noise'] = 0.02
+    st.session_state['threshold'] = 0.05
+    st.session_state['report'] = None
 
 if col_demo2.button("🔄 Replay"):
     st.session_state['scenario'] = 'D. Replay Attack'
     st.session_state['sender'] = 'ALICE'
     st.session_state['verifier'] = 'VERIFIER_A'
+    st.session_state['noise'] = 0.02
+    st.session_state['threshold'] = 0.05
+    st.session_state['report'] = None
 
 if col_demo1.button("⚡ Channel Noise"):
     st.session_state['scenario'] = 'E. Quantum Channel Manipulation'
+    st.session_state['sender'] = 'ALICE'
+    st.session_state['verifier'] = 'VERIFIER_A'  # Ensure authorized verifier for channel noise scenario
     st.session_state['noise'] = 0.35
+    st.session_state['threshold'] = 0.05
+    st.session_state['report'] = None
 
 if col_demo2.button("🚫 Unauthorized"):
     st.session_state['scenario'] = 'F. Unauthorized Verification'
+    st.session_state['sender'] = 'ALICE'
     st.session_state['verifier'] = 'UNAUTHORIZED_EVE'
+    st.session_state['noise'] = 0.02
+    st.session_state['threshold'] = 0.05
+    st.session_state['report'] = None
 
 st.sidebar.markdown("---")
 
@@ -126,12 +148,27 @@ st.session_state['noise'] = channel_noise
 acceptance_threshold = st.sidebar.slider("Acceptance Error Threshold", min_value=0.01, max_value=0.20, value=float(st.session_state['threshold']), step=0.01)
 st.session_state['threshold'] = acceptance_threshold
 
+current_config = (
+    selected_scenario,
+    sender_input,
+    verifier_input,
+    message_input,
+    num_measurements,
+    channel_noise,
+    acceptance_threshold
+)
+
+# Clear stale result if user changed any parameter since the last run
+if st.session_state['last_config'] != current_config:
+    st.session_state['report'] = None
+
 st.sidebar.markdown("---")
 col_run, col_reset = st.sidebar.columns(2)
 run_btn = col_run.button("▶ Run Pipeline", type="primary", use_container_width=True)
 
 if col_reset.button("🗑 Reset Ledger", use_container_width=True):
     clear_replay_ledger()
+    st.session_state['report'] = None
     st.sidebar.success("Replay Ledger Cleared!")
 
 # Input Validation
@@ -139,145 +176,163 @@ if not message_input.strip():
     st.error("Message payload cannot be empty. Please enter a message.")
     st.stop()
 
-# Pipeline Execution
-with st.spinner("Executing Quantum Teleportation & Threat Detection Pipeline..."):
-    scenario_code = selected_scenario.split(".")[0].strip()
-    report = run_threat_verification_pipeline(
-        message=message_input,
-        sender=sender_input,
-        verifier=verifier_input,
-        scenario=scenario_code,
-        num_measurements=num_measurements,
-        channel_noise=channel_noise,
-        acceptance_threshold=acceptance_threshold,
-        seed=42 if "Legitimate" in selected_scenario or "Forged" in selected_scenario else None
-    )
+# Pipeline Execution ONLY when "Run Pipeline" button is clicked
+if run_btn:
+    with st.spinner("Executing Quantum Teleportation & Threat Detection Pipeline..."):
+        scenario_code = selected_scenario.split(".")[0].strip()
+        report = run_threat_verification_pipeline(
+            message=message_input,
+            sender=sender_input,
+            verifier=verifier_input,
+            scenario=scenario_code,
+            num_measurements=num_measurements,
+            channel_noise=channel_noise,
+            acceptance_threshold=acceptance_threshold,
+            seed=42 if "Legitimate" in selected_scenario or "Forged" in selected_scenario else None
+        )
+        st.session_state['report'] = report
+        st.session_state['last_config'] = current_config
 
-# Render Visual Pipeline Header
-render_pipeline_flow("DECISION")
+# Render UI depending on whether pipeline has been executed
+report = st.session_state['report']
 
-# Prominent Verdict Banner
-is_accepted = (report["decision"] == "VERIFICATION ACCEPTED")
+if report is None:
+    # Initial / Ready State: NO results displayed until user clicks Run Pipeline
+    render_pipeline_flow("ALL")
 
-if is_accepted:
-    st.markdown(f'''
-    <div class="status-accepted">
-        ✅ VERIFICATION ACCEPTED — LEGITIMATE QUANTUM DIGITAL SIGNATURE
+    st.markdown('''
+    <div class="status-ready">
+        READY — RUN VERIFICATION
     </div>
     ''', unsafe_allow_html=True)
+
+    st.info("👈 Select a scenario and simulation parameters in the sidebar, then click **▶ Run Pipeline** to execute threat verification.")
 else:
-    st.markdown(f'''
-    <div class="status-threat">
-        🚨 THREAT DETECTED — {report["threat_type"].upper()}
-    </div>
-    ''', unsafe_allow_html=True)
+    # Execution Complete: Display results
+    render_pipeline_flow("DECISION")
 
-# Metric Summary Cards
-col_m1, col_m2, col_m3, col_m4, col_m5 = st.columns(5)
-col_m1.metric("Empirical Error Rate", f"{report['metrics']['error_rate']*100:.2f}%", f"Threshold: {acceptance_threshold*100:.1f}%")
-col_m2.metric("Forgery Probability", f"{report['metrics']['forgery_probability']*100:.2f}%")
-col_m3.metric("Verification Accuracy", f"{report['metrics']['accuracy']*100:.1f}%")
-col_m4.metric("Replay Detected?", "YES 🚨" if report['replay_status']['replay_detected'] else "NO ✅")
-col_m5.metric("Authorized Verifier?", "YES ✅" if report['authorized_verifier'] else "NO 🚫")
+    # Prominent Verdict Banner
+    is_accepted = (report["decision"] == "VERIFICATION ACCEPTED")
 
-# Tabbed Layout for Detailed Breakdown
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
-    "📊 Threat Dashboard",
-    "🔑 Signature Metadata",
-    "🌀 Quantum Teleportation",
-    "📈 Measurement Analytics",
-    "📘 Security Interpretation",
-    "📥 Audit Export"
-])
+    if is_accepted:
+        st.markdown(f'''
+        <div class="status-accepted">
+            ✅ VERIFICATION ACCEPTED — LEGITIMATE QUANTUM DIGITAL SIGNATURE
+        </div>
+        ''', unsafe_allow_html=True)
+    else:
+        st.markdown(f'''
+        <div class="status-threat">
+            🚨 THREAT DETECTED — {report["threat_type"].upper()}
+        </div>
+        ''', unsafe_allow_html=True)
 
-with tab1:
-    st.markdown("### 🛡️ Cyber Threat Analysis Summary")
-    c1, c2 = st.columns([1, 1])
-    with c1:
-        st.markdown("<div class='quantum-card'>", unsafe_allow_html=True)
-        st.markdown(f"**Target Message:** {report['message']}")
-        st.markdown(f"**Claimed Sender:** <span class='mono-badge'>{report['sender_identity']}</span>", unsafe_allow_html=True)
-        st.markdown(f"**Verifier:** <span class='mono-badge'>{report['verifier_identity']}</span>", unsafe_allow_html=True)
-        st.markdown(f"**Attack Mode:** {report['threat_type']}")
-        st.markdown(f"**Risk Severity:** **{report['risk_level']}**")
-        st.markdown("</div>", unsafe_allow_html=True)
+    # Metric Summary Cards
+    col_m1, col_m2, col_m3, col_m4, col_m5 = st.columns(5)
+    col_m1.metric("Empirical Error Rate", f"{report['metrics']['error_rate']*100:.2f}%", f"Threshold: {acceptance_threshold*100:.1f}%")
+    col_m2.metric("Forgery Probability", f"{report['metrics']['forgery_probability']*100:.2f}%")
+    col_m3.metric("Verification Accuracy", f"{report['metrics']['accuracy']*100:.1f}%")
+    col_m4.metric("Replay Detected?", "YES 🚨" if report['replay_status']['replay_detected'] else "NO ✅")
+    col_m5.metric("Authorized Verifier?", "YES ✅" if report['authorized_verifier'] else "NO 🚫")
 
-        fig_gauge = plot_error_rate_gauge(report['metrics']['error_rate'], acceptance_threshold)
-        st.plotly_chart(fig_gauge, use_container_width=True)
+    # Tabbed Layout for Detailed Breakdown
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+        "📊 Threat Dashboard",
+        "🔑 Signature Metadata",
+        "🌀 Quantum Teleportation",
+        "📈 Measurement Analytics",
+        "📘 Security Interpretation",
+        "📥 Audit Export"
+    ])
 
-    with c2:
-        fig_obs = plot_expected_vs_observed(report['measurement_data'])
-        st.plotly_chart(fig_obs, use_container_width=True)
+    with tab1:
+        st.markdown("### 🛡️ Cyber Threat Analysis Summary")
+        c1, c2 = st.columns([1, 1])
+        with c1:
+            st.markdown("<div class='quantum-card'>", unsafe_allow_html=True)
+            st.markdown(f"**Target Message:** {report['message']}")
+            st.markdown(f"**Claimed Sender:** <span class='mono-badge'>{report['sender_identity']}</span>", unsafe_allow_html=True)
+            st.markdown(f"**Verifier:** <span class='mono-badge'>{report['verifier_identity']}</span>", unsafe_allow_html=True)
+            st.markdown(f"**Attack Mode:** {report['threat_type']}")
+            st.markdown(f"**Risk Severity:** **{report['risk_level']}**")
+            st.markdown("</div>", unsafe_allow_html=True)
 
-with tab2:
-    st.markdown("### 🔑 Signature Package & Dual-Layer Verification")
-    st.markdown("""
-    A Quantum Digital Signature (QDS) combines a **Classical Integrity Layer** (SHA-256 Digest) 
-    with a **Simulated Quantum State Sequence** (Pauli eigenstates).
-    """)
-    sig = report['signature']
-    st.json({
-        "signature_id": sig.get('signature_id', ''),
-        "message_digest_sha256": sig.get('message_digest', ''),
-        "nonce": sig.get('nonce', ''),
-        "timestamp": sig.get('timestamp', ''),
-        "quantum_state_tokens": sig.get('quantum_states', []),
-        "bases_used": sig.get('basis_sequence', sig.get('bases', []))
-    })
+            fig_gauge = plot_error_rate_gauge(report['metrics']['error_rate'], acceptance_threshold)
+            st.plotly_chart(fig_gauge, use_container_width=True)
 
-with tab3:
-    st.markdown("### 🌀 Quantum Teleportation & Pauli Correction Simulation")
-    st.markdown(r"""
-    **Teleportation Protocol Flow:**
-    1. **Entanglement Preparation:** Sender & Receiver share Bell pair $|\Phi^+\rangle = \frac{1}{\sqrt{2}}(|00\rangle + |11\rangle)$.
-    2. **Bell State Measurement (BSM):** Sender performs BSM on unknown signature qubit $|\psi\rangle$ and EPR qubit.
-    3. **Classical Feed-forward:** Sender transmits 2 classical measurement bits ($b_1, b_2$) to Receiver.
-    4. **Pauli Unitary Correction:** Receiver applies operator $X^{b_2} Z^{b_1}$ to reconstruct signature state.
-    """)
-    st.info(f"**Simulated Channel Noise Level:** {channel_noise*100:.1f}% bit/phase flip probability.")
-    fig_noise = plot_noise_vs_error_simulation(channel_noise, report['metrics']['error_rate'])
-    st.plotly_chart(fig_noise, use_container_width=True)
+        with c2:
+            fig_obs = plot_expected_vs_observed(report['measurement_data'])
+            st.plotly_chart(fig_obs, use_container_width=True)
 
-with tab4:
-    st.markdown("### 📈 Projective Measurement Analytics")
-    mdata = report['measurement_data']
-    col_a1, col_a2 = st.columns(2)
-    col_a1.metric("Total Measurements (N)", mdata['total_measurements'])
-    col_a1.metric("Matching Eigenstates", mdata['matches'])
-    col_a2.metric("Mismatched Outcomes", mdata['mismatches'])
-    col_a2.metric("Expected Eigenstate", mdata['expected_state'])
+    with tab2:
+        st.markdown("### 🔑 Signature Package & Dual-Layer Verification")
+        st.markdown("""
+        A Quantum Digital Signature (QDS) combines a **Classical Integrity Layer** (SHA-256 Digest) 
+        with a **Simulated Quantum State Sequence** (Pauli eigenstates).
+        """)
+        sig = report['signature']
+        st.json({
+            "signature_id": sig.get('signature_id', ''),
+            "message_digest_sha256": sig.get('message_digest', ''),
+            "nonce": sig.get('nonce', ''),
+            "timestamp": sig.get('timestamp', ''),
+            "quantum_state_tokens": sig.get('quantum_states', []),
+            "bases_used": sig.get('basis_sequence', sig.get('bases', []))
+        })
 
-    st.markdown("#### Measurement Frequency Breakdown")
-    st.write(mdata['counts'])
+    with tab3:
+        st.markdown("### 🌀 Quantum Teleportation & Pauli Correction Simulation")
+        st.markdown(r"""
+        **Teleportation Protocol Flow:**
+        1. **Entanglement Preparation:** Sender & Receiver share Bell pair $|\Phi^+\rangle = \frac{1}{\sqrt{2}}(|00\rangle + |11\rangle)$.
+        2. **Bell State Measurement (BSM):** Sender performs BSM on unknown signature qubit $|\psi\rangle$ and EPR qubit.
+        3. **Classical Feed-forward:** Sender transmits 2 classical measurement bits ($b_1, b_2$) to Receiver.
+        4. **Pauli Unitary Correction:** Receiver applies operator $X^{b_2} Z^{b_1}$ to reconstruct signature state.
+        """)
+        st.info(f"**Simulated Channel Noise Level:** {channel_noise*100:.1f}% bit/phase flip probability.")
+        fig_noise = plot_noise_vs_error_simulation(channel_noise, report['metrics']['error_rate'])
+        st.plotly_chart(fig_noise, use_container_width=True)
 
-with tab5:
-    st.markdown("### 📘 Security Interpretation & Viva Defense Notes")
-    st.markdown(f"""
-    **Why was this attempt classified as {report['decision']}?**
+    with tab4:
+        st.markdown("### 📈 Projective Measurement Analytics")
+        mdata = report['measurement_data']
+        col_a1, col_a2 = st.columns(2)
+        col_a1.metric("Total Measurements (N)", mdata['total_measurements'])
+        col_a1.metric("Matching Eigenstates", mdata['matches'])
+        col_a2.metric("Mismatched Outcomes", mdata['mismatches'])
+        col_a2.metric("Expected Eigenstate", mdata['expected_state'])
 
-    1. **Forgery:** If an adversary tampers with the signature payload or basis choices, the prepared quantum state $|\psi\\rangle$ fails to match the receiver's projective measurement basis. Measurement collapse onto orthogonal states produces high mismatch ($> 50\\%$ theoretical for random state guess).
-    2. **Impersonation:** The sender identity <{report['sender_identity']}> is verified against the signature's underlying key/state derivation. An attacker who cannot generate the matching state sequence triggers state discrepancies.
-    3. **Replay Attack:** In-memory ledger tracking detected nonce reuse for signature ID {sig['signature_id']} (Ledger active size: {get_session_ledger_size()} entries). Re-sent valid signatures are rejected.
-    4. **Quantum Channel Manipulation:** Noise induces phase-flips ($Z$) and bit-flips ($X$), increasing empirical error rate above the specified threshold ({acceptance_threshold*100:.1f}%).
-    5. **Unauthorized Verifier:** Verifier <{report['verifier_identity']}> is validated against authorized list.
-    """)
+        st.markdown("#### Measurement Frequency Breakdown")
+        st.write(mdata['counts'])
 
-with tab6:
-    st.markdown("### 📥 Download Audit & Verification Reports")
-    col_json, col_csv = st.columns(2)
+    with tab5:
+        st.markdown("### 📘 Security Interpretation & Viva Defense Notes")
+        st.markdown(f"""
+        **Why was this attempt classified as {report['decision']}?**
 
-    json_data = generate_report_json(report)
-    col_json.download_button(
-        label="📄 Download Report (JSON)",
-        data=json_data,
-        file_name=f"qds_audit_{sig['signature_id']}.json",
-        mime="application/json"
-    )
+        1. **Forgery:** If an adversary tampers with the signature payload or basis choices, the prepared quantum state $|\psi\\rangle$ fails to match the receiver's projective measurement basis. Measurement collapse onto orthogonal states produces high mismatch ($> 50\\%$ theoretical for random state guess).
+        2. **Impersonation:** The sender identity <{report['sender_identity']}> is verified against the signature's underlying key/state derivation. An attacker who cannot generate the matching state sequence triggers state discrepancies.
+        3. **Replay Attack:** In-memory ledger tracking detected nonce reuse for signature ID {sig['signature_id']} (Ledger active size: {get_session_ledger_size()} entries). Re-sent valid signatures are rejected.
+        4. **Quantum Channel Manipulation:** Noise induces phase-flips ($Z$) and bit-flips ($X$), increasing empirical error rate above the specified threshold ({acceptance_threshold*100:.1f}%).
+        5. **Unauthorized Verifier:** Verifier <{report['verifier_identity']}> is validated against authorized list.
+        """)
 
-    csv_data = generate_report_csv(report)
-    col_csv.download_button(
-        label="📊 Download Report (CSV)",
-        data=csv_data,
-        file_name=f"qds_audit_{sig['signature_id']}.csv",
-        mime="text/csv"
-    )
+    with tab6:
+        st.markdown("### 📥 Download Audit & Verification Reports")
+        col_json, col_csv = st.columns(2)
+
+        json_data = generate_report_json(report)
+        col_json.download_button(
+            label="📄 Download Report (JSON)",
+            data=json_data,
+            file_name=f"qds_audit_{sig['signature_id']}.json",
+            mime="application/json"
+        )
+
+        csv_data = generate_report_csv(report)
+        col_csv.download_button(
+            label="📊 Download Report (CSV)",
+            data=csv_data,
+            file_name=f"qds_audit_{sig['signature_id']}.csv",
+            mime="text/csv"
+        )

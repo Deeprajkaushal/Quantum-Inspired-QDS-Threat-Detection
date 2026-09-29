@@ -81,6 +81,20 @@ def apply_custom_css():
         box-shadow: 0 0 15px rgba(239, 68, 68, 0.2);
     }
     
+    .status-ready {
+        background: rgba(59, 130, 246, 0.15);
+        border: 1px solid #3b82f6;
+        border-left: 6px solid #3b82f6;
+        color: #60a5fa;
+        padding: 1.25rem;
+        border-radius: 10px;
+        font-weight: 700;
+        font-size: 1.5rem;
+        text-align: center;
+        margin-bottom: 1.5rem;
+        box-shadow: 0 0 15px rgba(59, 130, 246, 0.2);
+    }
+    
     .pipeline-step {
         display: inline-block;
         background: #1f2937;
